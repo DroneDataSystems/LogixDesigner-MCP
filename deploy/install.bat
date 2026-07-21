@@ -111,51 +111,48 @@ set "STUDIO_BASE=C:\Program Files (x86)\Rockwell Software\Studio 5000"
 set "STUDIO_BASE2=C:\Program Files\Rockwell Software\Studio 5000"
 
 REM Try to find LogixDesigner.SDK.dll or similar SDK assembly
+REM Use delayed expansion (!var!) to avoid (x86) parens breaking the parser
 for %%p in (
-    "%STUDIO_BASE%\LogixDesigner.SDK.dll"
-    "%STUDIO_BASE%\Bin\LogixDesigner.SDK.dll"
-    "%STUDIO_BASE%\SDK\LogixDesigner.SDK.dll"
-    "%STUDIO_BASE%\RALogixDesignerSDK.dll"
-    "%STUDIO_BASE%\Bin\RALogixDesignerSDK.dll"
-    "%STUDIO_BASE2%\LogixDesigner.SDK.dll"
-    "%STUDIO_BASE2%\Bin\LogixDesigner.SDK.dll"
+    "!STUDIO_BASE!\LogixDesigner.SDK.dll"
+    "!STUDIO_BASE!\Bin\LogixDesigner.SDK.dll"
+    "!STUDIO_BASE!\SDK\LogixDesigner.SDK.dll"
+    "!STUDIO_BASE!\RALogixDesignerSDK.dll"
+    "!STUDIO_BASE!\Bin\RALogixDesignerSDK.dll"
+    "!STUDIO_BASE2!\LogixDesigner.SDK.dll"
+    "!STUDIO_BASE2!\Bin\LogixDesigner.SDK.dll"
 ) do (
     if exist "%%~p" (
         set "SDK_PATH=%%~p"
         set SDK_FOUND=1
-        goto :sdk_found
     )
 )
+if !SDK_FOUND! EQU 1 goto :sdk_found
 
 REM If not found in common paths, search recursively (limited depth)
-if %SDK_FOUND% EQU 0 (
-    echo Searching Studio 5000 directories...
-    REM pushd into the directory to avoid (x86) parentheses breaking the for loop
-    set "SDK_DIR=%STUDIO_BASE%"
-    call :search_dir "!SDK_DIR!"
-    if !SDK_FOUND! EQU 0 (
-        set "SDK_DIR=%STUDIO_BASE2%"
-        call :search_dir "!SDK_DIR!"
-    )
-)
-
-goto :sdk_done
-
-:search_dir
-REM Search a single directory for *SDK*.dll — avoids parenthetical paths in for /f
-pushd "%~1" 2>nul
+REM Use pushd to avoid (x86) in the for /f command string
+echo Searching Studio 5000 directories...
+pushd "!STUDIO_BASE!" 2>nul
 if not errorlevel 1 (
     for /f "delims=" %%f in ('dir /s /b *SDK*.dll 2^>nul') do (
         set "SDK_PATH=%%f"
         set SDK_FOUND=1
         popd
-        goto :sdk_done
+        goto :sdk_found
     )
     popd
 )
-exit /b
+pushd "!STUDIO_BASE2!" 2>nul
+if not errorlevel 1 (
+    for /f "delims=" %%f in ('dir /s /b *SDK*.dll 2^>nul') do (
+        set "SDK_PATH=%%f"
+        set SDK_FOUND=1
+        popd
+        goto :sdk_found
+    )
+    popd
+)
 
-:sdk_done
+:sdk_found
 if %SDK_FOUND% EQU 1 (
     echo Found SDK assembly: %SDK_PATH%
     echo.
