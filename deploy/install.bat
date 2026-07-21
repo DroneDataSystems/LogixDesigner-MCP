@@ -100,55 +100,60 @@ echo Installation complete.
 echo.
 
 REM --------------------------------------------------------------------------
-REM 4. Discover Logix Designer SDK assembly (all paths via PowerShell —
-REM    cmd.exe cannot handle "Program Files (x86)" in any parenthesized block)
+REM 4. Discover Logix Designer SDK assembly (via PowerShell — batch can't
+REM    parse "Program Files (x86)" in any parenthesized context)
 REM --------------------------------------------------------------------------
 echo [4/6] Discovering Logix Designer SDK assembly...
 set SDK_FOUND=0
-set SDK_PATH=
 
-powershell -NoProfile -Command ^
-"$known = @(^
-  'C:\Program Files (x86)\Rockwell Software\Studio 5000\LogixDesigner.SDK.dll', ^
-  'C:\Program Files (x86)\Rockwell Software\Studio 5000\Bin\LogixDesigner.SDK.dll', ^
-  'C:\Program Files (x86)\Rockwell Software\Studio 5000\SDK\LogixDesigner.SDK.dll', ^
-  'C:\Program Files (x86)\Rockwell Software\Studio 5000\RALogixDesignerSDK.dll', ^
-  'C:\Program Files (x86)\Rockwell Software\Studio 5000\Bin\RALogixDesignerSDK.dll', ^
-  'C:\Program Files\Rockwell Software\Studio 5000\LogixDesigner.SDK.dll', ^
-  'C:\Program Files\Rockwell Software\Studio 5000\Bin\LogixDesigner.SDK.dll'^
-); ^
-foreach ($p in $known) { if (Test-Path -LiteralPath $p) { Write-Output $p; exit 0 } }; ^
-$bases = @(^
-  'C:\Program Files (x86)\Rockwell Software\Studio 5000', ^
-  'C:\Program Files\Rockwell Software\Studio 5000'^
-); ^
-foreach ($base in $bases) { ^
-  if (Test-Path $base) { ^
-    $r = Get-ChildItem -LiteralPath $base -Recurse -Filter '*SDK*.dll' -ErrorAction SilentlyContinue ^| Select-Object -First 1 -ExpandProperty FullName; ^
-    if ($r) { Write-Output $r; exit 0 } ^
-  } ^
-}; ^
-Write-Output ''" > "%TEMP%\logix_sdk_result.txt"
-
-set /p SDK_PATH=<"%TEMP%\logix_sdk_result.txt"
-del "%TEMP%\logix_sdk_result.txt" 2>nul
-
-if not "%SDK_PATH%"=="" set SDK_FOUND=1
+REM for /f 'command' — batch does NOT parse inside single-quoted commands,
+REM so the (x86) inside the PowerShell string is safe.
+for /f "delims=" %%f in ('powershell -NoProfile -Command ^
+  "$known = @(^
+    'C:\Program Files (x86)\Rockwell Software\Studio 5000\LogixDesigner.SDK.dll',^
+    'C:\Program Files (x86)\Rockwell Software\Studio 5000\Bin\LogixDesigner.SDK.dll',^
+    'C:\Program Files (x86)\Rockwell Software\Studio 5000\SDK\LogixDesigner.SDK.dll',^
+    'C:\Program Files (x86)\Rockwell Software\Studio 5000\RALogixDesignerSDK.dll',^
+    'C:\Program Files (x86)\Rockwell Software\Studio 5000\Bin\RALogixDesignerSDK.dll',^
+    'C:\Program Files\Rockwell Software\Studio 5000\LogixDesigner.SDK.dll',^
+    'C:\Program Files\Rockwell Software\Studio 5000\Bin\LogixDesigner.SDK.dll'^
+  );^
+  foreach ($p in $known) { if (Test-Path -LiteralPath $p) { Write-Output $p; exit 0 } };^
+  $bases = @(^
+    'C:\Program Files (x86)\Rockwell Software\Studio 5000',^
+    'C:\Program Files\Rockwell Software\Studio 5000'^
+  );^
+  foreach ($base in $bases) {^
+    if (Test-Path $base) {^
+      $r = Get-ChildItem -LiteralPath $base -Recurse -Filter '*SDK*.dll' -ErrorAction SilentlyContinue ^| Select-Object -First 1 -ExpandProperty FullName;^
+      if ($r) { Write-Output $r; exit 0 }^
+    }^
+  };^
+  Write-Output ''"') do (
+    set "SDK_PATH=%%f"
+    set SDK_FOUND=1
+)
 
 :sdk_found
-if %SDK_FOUND% EQU 1 (
-    echo Found SDK assembly: %SDK_PATH%
-    echo.
-    echo Set this path in your environment or config:
-    echo   set LOGIX_SDK_ASSEMBLY=%SDK_PATH%
-) else (
-    echo WARNING: Could not automatically locate Logix Designer SDK assembly.
-    echo Please manually locate the SDK DLL under your Studio 5000 installation.
-    echo Typical location: C:\Program Files (x86)\Rockwell Software\Studio 5000\
-    echo.
-    echo Once found, set the environment variable:
-    echo   set LOGIX_SDK_ASSEMBLY=C:\path\to\LogixDesigner.SDK.dll
-)
+if %SDK_FOUND% EQU 1 goto :sdk_report_found
+goto :sdk_report_missing
+
+:sdk_report_found
+echo Found SDK assembly: !SDK_PATH!
+echo.
+echo Set this path in your environment or config:
+echo   set LOGIX_SDK_ASSEMBLY=!SDK_PATH!
+goto :sdk_reported
+
+:sdk_report_missing
+echo WARNING: Could not automatically locate Logix Designer SDK assembly.
+echo Please manually locate the SDK DLL under your Studio 5000 installation.
+echo Typical location: C:\Program Files ^(x86^)\Rockwell Software\Studio 5000\
+echo.
+echo Once found, set the environment variable:
+echo   set LOGIX_SDK_ASSEMBLY=C:\path\to\LogixDesigner.SDK.dll
+
+:sdk_reported
 echo.
 
 REM --------------------------------------------------------------------------
