@@ -5,8 +5,11 @@ from logix_mcp.models import (
     ExportResult,
     ProgramInfo,
     RoutineInfo,
+    SdkError,
+    SdkErrorCode,
     SdkInfo,
     TagDef,
+    TaskInfo,
     VerifyResult,
 )
 
@@ -80,3 +83,30 @@ def test_export_result_fields():
     result = ExportResult(path="/tmp/out.L5K", size_bytes=248913, routine_count=6)
     data = result.model_dump()
     assert data == {"path": "/tmp/out.L5K", "size_bytes": 248913, "routine_count": 6}
+
+
+def test_sdk_error_codes_and_serialization():
+    err = SdkError(
+        code=SdkErrorCode.NO_PROJECT_OPEN,
+        message="No project open — call open_project() first",
+        detail=None,
+    )
+    assert err.code == SdkErrorCode.NO_PROJECT_OPEN
+    data = err.model_dump()
+    assert data["code"] == "NO_PROJECT_OPEN"
+    restored = SdkError.model_validate(data)
+    assert restored == err
+
+
+def test_task_info_model():
+    task = TaskInfo(
+        name="MainTask",
+        task_type="Continuous",
+        rate_ms=None,
+        priority=None,
+        program_names=["MainProgram"],
+    )
+    assert task.task_type == "Continuous"
+    assert task.rate_ms is None
+    restored = TaskInfo.model_validate(task.model_dump())
+    assert restored == task

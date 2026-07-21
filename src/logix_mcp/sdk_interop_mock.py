@@ -11,6 +11,7 @@ from .models import (
     RoutineInfo,
     SdkInfo,
     TagDef,
+    TaskInfo,
     VerifyResult,
 )
 from .sdk_interop import SdkInterop
@@ -166,6 +167,83 @@ class MockSdkInterop(SdkInterop):
     def verify(self) -> VerifyResult:
         self._require_open()
         return VerifyResult(errors=[], warnings=[], passed=True)
+
+    # --------------------------------------------------------------- save
+
+    def save_acd(self, output_path: str) -> ExportResult:
+        self._require_open()
+        return ExportResult(
+            path=output_path,
+            size_bytes=1_048_576,
+            routine_count=6,
+        )
+
+    # ------------------------------------------------------------- status
+
+    def project_status(self) -> dict:
+        return {
+            "is_open": self._project_open,
+            "project_path": self._project_path,
+            "controller_name": "Test_Controller" if self._project_open else None,
+        }
+
+    # ---------------------------------------------------------- rung logic
+
+    def get_rung_logic(self, program: str, routine: str) -> list[dict]:
+        self._require_open()
+        fake_rungs: dict[str, list[dict]] = {
+            "MainRoutine": [
+                {"rung": 0, "text": "XIC Motor_Start XIO Motor_Run OTE Motor_Run"},
+                {"rung": 1, "text": "XIC Motor_Run TON Step_Timer ? ?"},
+                {"rung": 2, "text": "XIC Step_Timer.DN OTE Cycle_Complete"},
+                {"rung": 3, "text": "XIC Cycle_Complete ADD Cycle_Count 1 Cycle_Count"},
+                {"rung": 4, "text": "XIC Fault_Reset OTU Fault_Latch"},
+            ],
+            "Alarm_Handler": [
+                {"rung": 0, "text": "XIC Alarm_Trigger OTE Alarm_Active"},
+                {"rung": 1, "text": "XIC Alarm_Active COP Alarm_History[0] Alarm_History[1] 31"},
+            ],
+            "Scaling": [
+                {"rung": 0, "text": "Scaled_Value := (Raw_Input * 0.025) + Offset;"},
+                {"rung": 1, "text": "IF Scaled_Value > Max_Limit THEN"},
+                {"rung": 2, "text": "    Scaled_Value := Max_Limit;"},
+                {"rung": 3, "text": "END_IF;"},
+            ],
+        }
+        return fake_rungs.get(routine, [])
+
+    # ------------------------------------------------------------- host
+
+    def restart_host(self) -> dict:
+        return {"restarted": True, "version": "33.01.00 (Mock)"}
+
+    # ------------------------------------------------------------- tasks
+
+    def get_task_structure(self) -> list[TaskInfo]:
+        self._require_open()
+        return [
+            TaskInfo(
+                name="MainTask",
+                task_type="Continuous",
+                rate_ms=None,
+                priority=None,
+                program_names=["MainProgram", "Motion_Control", "Safety_Gates"],
+            ),
+            TaskInfo(
+                name="MotionTask",
+                task_type="Periodic",
+                rate_ms=10,
+                priority=5,
+                program_names=["Motion_Control"],
+            ),
+            TaskInfo(
+                name="SafetyTask",
+                task_type="Periodic",
+                rate_ms=20,
+                priority=1,
+                program_names=["Safety_Gates"],
+            ),
+        ]
 
     # ------------------------------------------------------------ internal
 

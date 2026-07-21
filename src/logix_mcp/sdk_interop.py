@@ -12,6 +12,7 @@ from .models import (
     ProgramInfo,
     SdkInfo,
     TagDef,
+    TaskInfo,
     VerifyResult,
 )
 
@@ -62,4 +63,34 @@ class SdkInterop(ABC):
     @abstractmethod
     def verify(self) -> VerifyResult:
         """Run controller verification. Returns errors/warnings."""
+        ...
+
+    @abstractmethod
+    def save_acd(self, output_path: str) -> ExportResult:
+        """Save the open project as an ACD file."""
+        ...
+
+    @abstractmethod
+    def project_status(self) -> dict:
+        """Return current project open state and metadata."""
+        ...
+
+    @abstractmethod
+    def get_rung_logic(self, program: str, routine: str) -> list[dict]:
+        """Return rung-by-rung logic for a given routine.
+
+        Each dict should contain at least:
+          - rung: int
+          - text: str  (e.g. ladder logic or ST source)
+        """
+        ...
+
+    @abstractmethod
+    def restart_host(self) -> dict:
+        """Kill and restart the SDK COM host process (recovery)."""
+        ...
+
+    @abstractmethod
+    def get_task_structure(self) -> list[TaskInfo]:
+        """Return the controller task configuration."""
         ...

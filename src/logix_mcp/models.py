@@ -1,6 +1,27 @@
 """Pydantic response models — the stable contract for all MCP tools."""
 
+from enum import Enum
+from typing import Any
+
 from pydantic import BaseModel
+
+
+class SdkErrorCode(str, Enum):
+    """Structured error codes for SDK failures."""
+    NOT_FOUND = "NOT_FOUND"
+    NOT_LICENSED = "NOT_LICENSED"
+    PROJECT_ALREADY_OPEN = "PROJECT_ALREADY_OPEN"
+    NO_PROJECT_OPEN = "NO_PROJECT_OPEN"
+    SDK_CRASHED = "SDK_CRASHED"
+    TIMEOUT = "TIMEOUT"
+    UNKNOWN = "UNKNOWN"
+
+
+class SdkError(BaseModel):
+    """Structured error returned by all MCP tools on failure."""
+    code: SdkErrorCode
+    message: str
+    detail: str | None = None
 
 
 class SdkInfo(BaseModel):
@@ -47,3 +68,12 @@ class ExportResult(BaseModel):
     path: str
     size_bytes: int
     routine_count: int
+
+
+class TaskInfo(BaseModel):
+    """Controller task (continuous, periodic, event)."""
+    name: str
+    task_type: str          # "Continuous", "Periodic", "Event"
+    rate_ms: int | None     # scan rate for periodic tasks
+    priority: int | None
+    program_names: list[str]
