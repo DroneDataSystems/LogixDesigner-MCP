@@ -6,7 +6,7 @@ from typing import Any
 
 from fastmcp import FastMCP
 
-from .models import (
+from logix_mcp.models import (
     ControllerInfo,
     ExportResult,
     ProgramInfo,
@@ -17,8 +17,8 @@ from .models import (
     TaskInfo,
     VerifyResult,
 )
-from .sdk_interop import SdkInterop
-from .sdk_interop_mock import MockSdkInterop
+from logix_mcp.sdk_interop import SdkInterop
+from logix_mcp.sdk_interop_mock import MockSdkInterop
 
 
 def _make_interop() -> SdkInterop:
@@ -26,7 +26,7 @@ def _make_interop() -> SdkInterop:
     if sys.platform == "win32":
         # Phase 4: RealSdkInterop will live here. For now, fall back to mock.
         try:
-            from .sdk_interop_real import RealSdkInterop  # type: ignore[import-not-found]
+            from logix_mcp.sdk_interop_real import RealSdkInterop  # type: ignore[import-not-found]
 
             return RealSdkInterop()
         except ImportError:
