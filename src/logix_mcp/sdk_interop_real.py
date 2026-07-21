@@ -1,11 +1,13 @@
 """Real Logix Designer SDK interop — installed via .whl on Windows.
 
-SDK v2.0.2 is a synchronous Python client. No asyncio, no COM.
-Communicates with LdSdkServer.dll (TCP 53204).
+SDK v2.0.2: async Python client using LdSdkServer.dll (TCP 53204).
+Despite what inspect claims, open_logix_project/save_as/convert/etc.
+are async coroutines and must be awaited.
 
 Install:  pip install "<SDK_PATH>\\python\\logix_designer_sdk-2.0.2-py3-none-any.whl"
 """
 
+import asyncio
 import os
 import re
 import tempfile
@@ -31,6 +33,18 @@ from logix_mcp.sdk_interop import SdkInterop
 L5X_NS = "http://www.rockwellautomation.com/xml/schemas/L5X"
 
 
+def _run(coro):
+    """Run an async SDK call synchronously, bridging to our ABC."""
+    try:
+        return asyncio.run(coro)
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        try:
+            return loop.run_until_complete(coro)
+        finally:
+            loop.close()
+
+
 class RealSdkInterop(SdkInterop):
     """Real implementation using the Logix Designer SDK Python client (v2.0.2)."""
 
@@ -51,13 +65,13 @@ class RealSdkInterop(SdkInterop):
     # ── project lifecycle ───────────────────────────────────────────────
 
     def open_project(self, path: str) -> ControllerInfo:
-        self._project = LogixProject.open_logix_project(path)
+        self._project = _run(LogixProject.open_logix_project(path))
         self._project_path = path
         name = os.path.splitext(os.path.basename(path))[0]
         return ControllerInfo(
             name=name,
-            type="Unknown",       # SDK doesn't expose processor type directly
-            revision="Unknown",   # revision available after project inspection
+            type="Unknown",
+            revision="Unknown",
             project_path=path,
         )
 
@@ -67,7 +81,7 @@ class RealSdkInterop(SdkInterop):
 
     def save_acd(self, output_path: str) -> ExportResult:
         self._require_open()
-        self._project.save_as(output_path)
+        _run(self._project.save_as(output_path))
         size = os.path.getsize(output_path)
         return ExportResult(path=output_path, size_bytes=size, routine_count=0)
 
@@ -82,14 +96,12 @@ class RealSdkInterop(SdkInterop):
         return self._export_impl(output_path)
 
     def _export_impl(self, output_path: str) -> ExportResult:
-        # save_as uses file extension to determine format (L5K, L5X, ACD)
-        self._project.save_as(output_path)
+        _run(self._project.save_as(output_path))
         size = os.path.getsize(output_path)
         return ExportResult(path=output_path, size_bytes=size, routine_count=0)
 
     def import_l5k(self, input_path: str) -> ControllerInfo:
-        # convert(project_path, destination_revision) — 0 = latest installed
-        self._project = LogixProject.convert(input_path, 0)
+        self._project = _run(LogixProject.convert(input_path, 0))
         self._project_path = input_path
         name = os.path.splitext(os.path.basename(input_path))[0]
         return ControllerInfo(
@@ -111,7 +123,7 @@ class RealSdkInterop(SdkInterop):
 
             with tempfile.TemporaryDirectory() as tmpdir:
                 tmp_xml = os.path.join(tmpdir, "tags.L5X")
-                self._project.partial_export_to_xml_file(xpath, tmp_xml)
+                _run(self._project.partial_export_to_xml_file(xpath, tmp_xml))
                 return _parse_tags_from_l5x(tmp_xml, tag_type, scope)
         except LogixSdkError:
             return []
@@ -120,7 +132,7 @@ class RealSdkInterop(SdkInterop):
 
     def get_program_structure(self) -> list[ProgramInfo]:
         self._require_open()
-        xpaths = self._project.get_all_executables()
+        xpaths = _run(self._project.get_all_executables())
         programs: dict[str, list[RoutineInfo]] = {}
         for xp in xpaths:
             if "/Programs/Program" not in xp or "/Routines/Routine" not in xp:
@@ -147,7 +159,7 @@ class RealSdkInterop(SdkInterop):
             )
             with tempfile.TemporaryDirectory() as tmpdir:
                 tmp_xml = os.path.join(tmpdir, "rung.L5X")
-                self._project.partial_export_to_xml_file(xpath, tmp_xml)
+                _run(self._project.partial_export_to_xml_file(xpath, tmp_xml))
                 return _parse_rungs_from_l5x(tmp_xml)
         except LogixSdkError:
             return []
@@ -157,7 +169,9 @@ class RealSdkInterop(SdkInterop):
         try:
             with tempfile.TemporaryDirectory() as tmpdir:
                 tmp_xml = os.path.join(tmpdir, "tasks.L5X")
-                self._project.partial_export_to_xml_file("/Controller/Tasks", tmp_xml)
+                _run(self._project.partial_export_to_xml_file(
+                    "/Controller/Tasks", tmp_xml
+                ))
                 return _parse_tasks_from_l5x(tmp_xml)
         except LogixSdkError:
             return []
@@ -168,7 +182,7 @@ class RealSdkInterop(SdkInterop):
         self._require_open()
         tmp = tempfile.mktemp(suffix=".ACD")
         try:
-            self._project.save_as(tmp, force=True)
+            _run(self._project.save_as(tmp, force=True))
             return VerifyResult(errors=[], warnings=[], passed=True)
         except LogixSdkError as e:
             return VerifyResult(errors=[str(e)], warnings=[], passed=False)
@@ -202,21 +216,18 @@ class RealSdkInterop(SdkInterop):
 # ═══════════════════════════════════════════════════════════════════════════
 
 RSLOGIX5000_CONTENT = "RSLogix5000Content"
-
 NS = {"ns": L5X_NS}
 
 
 def _parse_tags_from_l5x(
     path: str, tag_type: str, scope: str | None
 ) -> list[TagDef]:
-    """Parse controller or program-scope tags from a partial L5X export."""
     try:
         tree = ET.parse(path)
         root = tree.getroot()
     except ET.ParseError:
         return []
 
-    # Handle RSLogix5000Content wrapper
     inner = root.find(f"{{{L5X_NS}}}{RSLOGIX5000_CONTENT}")
     if inner is not None:
         root = inner
@@ -226,20 +237,18 @@ def _parse_tags_from_l5x(
         name = tag_el.get("Name", "")
         data_type = tag_el.get("DataType", "")
         desc = tag_el.get("Description", "") or ""
-        tags.append(
-            TagDef(
-                name=name,
-                tag_type=tag_type,
-                data_type=data_type,
-                description=desc,
-                scope=scope.split(":", 1)[1] if scope and scope.startswith("program:") else None,
-            )
-        )
+        tags.append(TagDef(
+            name=name,
+            tag_type=tag_type,
+            data_type=data_type,
+            description=desc,
+            scope=scope.split(":", 1)[1]
+            if scope and scope.startswith("program:") else None,
+        ))
     return tags
 
 
 def _parse_rungs_from_l5x(path: str) -> list[dict[str, Any]]:
-    """Parse rung text from a partial L5X export of a routine."""
     try:
         tree = ET.parse(path)
         root = tree.getroot()
@@ -264,7 +273,6 @@ def _parse_rungs_from_l5x(path: str) -> list[dict[str, Any]]:
 
 
 def _parse_tasks_from_l5x(path: str) -> list[TaskInfo]:
-    """Parse task configuration from a partial L5X export."""
     try:
         tree = ET.parse(path)
         root = tree.getroot()
