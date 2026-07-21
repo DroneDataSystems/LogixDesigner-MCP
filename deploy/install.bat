@@ -100,57 +100,40 @@ echo Installation complete.
 echo.
 
 REM --------------------------------------------------------------------------
-REM 4. Discover Logix Designer SDK assembly
+REM 4. Discover Logix Designer SDK assembly (all paths via PowerShell —
+REM    cmd.exe cannot handle "Program Files (x86)" in any parenthesized block)
 REM --------------------------------------------------------------------------
 echo [4/6] Discovering Logix Designer SDK assembly...
 set SDK_FOUND=0
 set SDK_PATH=
 
-REM Common Studio 5000 installation paths (v33+)
-set "STUDIO_BASE=C:\Program Files (x86)\Rockwell Software\Studio 5000"
-set "STUDIO_BASE2=C:\Program Files\Rockwell Software\Studio 5000"
+powershell -NoProfile -Command ^
+"$known = @(^
+  'C:\Program Files (x86)\Rockwell Software\Studio 5000\LogixDesigner.SDK.dll', ^
+  'C:\Program Files (x86)\Rockwell Software\Studio 5000\Bin\LogixDesigner.SDK.dll', ^
+  'C:\Program Files (x86)\Rockwell Software\Studio 5000\SDK\LogixDesigner.SDK.dll', ^
+  'C:\Program Files (x86)\Rockwell Software\Studio 5000\RALogixDesignerSDK.dll', ^
+  'C:\Program Files (x86)\Rockwell Software\Studio 5000\Bin\RALogixDesignerSDK.dll', ^
+  'C:\Program Files\Rockwell Software\Studio 5000\LogixDesigner.SDK.dll', ^
+  'C:\Program Files\Rockwell Software\Studio 5000\Bin\LogixDesigner.SDK.dll'^
+); ^
+foreach ($p in $known) { if (Test-Path -LiteralPath $p) { Write-Output $p; exit 0 } }; ^
+$bases = @(^
+  'C:\Program Files (x86)\Rockwell Software\Studio 5000', ^
+  'C:\Program Files\Rockwell Software\Studio 5000'^
+); ^
+foreach ($base in $bases) { ^
+  if (Test-Path $base) { ^
+    $r = Get-ChildItem -LiteralPath $base -Recurse -Filter '*SDK*.dll' -ErrorAction SilentlyContinue ^| Select-Object -First 1 -ExpandProperty FullName; ^
+    if ($r) { Write-Output $r; exit 0 } ^
+  } ^
+}; ^
+Write-Output ''" > "%TEMP%\logix_sdk_result.txt"
 
-REM Try to find LogixDesigner.SDK.dll or similar SDK assembly
-REM Use delayed expansion (!var!) to avoid (x86) parens breaking the parser
-for %%p in (
-    "!STUDIO_BASE!\LogixDesigner.SDK.dll"
-    "!STUDIO_BASE!\Bin\LogixDesigner.SDK.dll"
-    "!STUDIO_BASE!\SDK\LogixDesigner.SDK.dll"
-    "!STUDIO_BASE!\RALogixDesignerSDK.dll"
-    "!STUDIO_BASE!\Bin\RALogixDesignerSDK.dll"
-    "!STUDIO_BASE2!\LogixDesigner.SDK.dll"
-    "!STUDIO_BASE2!\Bin\LogixDesigner.SDK.dll"
-) do (
-    if exist "%%~p" (
-        set "SDK_PATH=%%~p"
-        set SDK_FOUND=1
-    )
-)
-if !SDK_FOUND! EQU 1 goto :sdk_found
+set /p SDK_PATH=<"%TEMP%\logix_sdk_result.txt"
+del "%TEMP%\logix_sdk_result.txt" 2>nul
 
-REM If not found in common paths, search recursively (limited depth)
-REM Use pushd to avoid (x86) in the for /f command string
-echo Searching Studio 5000 directories...
-pushd "!STUDIO_BASE!" 2>nul
-if not errorlevel 1 (
-    for /f "delims=" %%f in ('dir /s /b *SDK*.dll 2^>nul') do (
-        set "SDK_PATH=%%f"
-        set SDK_FOUND=1
-        popd
-        goto :sdk_found
-    )
-    popd
-)
-pushd "!STUDIO_BASE2!" 2>nul
-if not errorlevel 1 (
-    for /f "delims=" %%f in ('dir /s /b *SDK*.dll 2^>nul') do (
-        set "SDK_PATH=%%f"
-        set SDK_FOUND=1
-        popd
-        goto :sdk_found
-    )
-    popd
-)
+if not "%SDK_PATH%"=="" set SDK_FOUND=1
 
 :sdk_found
 if %SDK_FOUND% EQU 1 (
