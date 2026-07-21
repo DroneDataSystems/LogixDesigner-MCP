@@ -1,0 +1,226 @@
+# ==============================================================================
+# Cloudflare Tunnel Configuration for Logix MCP Server
+# ==============================================================================
+# This file documents how to expose the Logix MCP Server (running on Windows
+# with Studio 5000) to the internet via Cloudflare Tunnel, so the Linux Hermes
+# agent can reach it securely without opening inbound firewall ports.
+#
+# Architecture:
+#   Hermes (Linux) --> Cloudflare Edge --> cloudflared (Windows) --> localhost:8765
+#
+# Prerequisites:
+#   - A Cloudflare account with a domain added (e.g., your-domain.com)
+#   - cloudflared installed on the Windows machine
+#   - The Logix MCP Server already installed and running locally on port 8765
+#
+# ==============================================================================
+# 1. INSTALL CLOUDFLARED ON WINDOWS
+# ==============================================================================
+#
+# Option A: Using winget (recommended on Windows Server 2022 / Windows 11)
+#
+#   winget install --id Cloudflare.cloudflared
+#
+# Option B: Manual download
+#
+#   1. Download the latest Windows 64-bit .msi or .exe from:
+#      https://github.com/cloudflare/cloudflared/releases/latest
+#   2. Install the MSI, or place cloudflared.exe in a directory in your PATH
+#      (e.g., C:\Program Files\cloudflared\)
+#
+# Verify installation:
+#
+#   cloudflared --version
+#
+# ==============================================================================
+# 2. AUTHENTICATE WITH CLOUDFLARE
+# ==============================================================================
+#
+# Run the login command. This opens a browser window to authenticate.
+#
+#   cloudflared tunnel login
+#
+# This creates a cert.pem file in %USERPROFILE%\.cloudflared\ (or C:\Windows\System32\config\systemprofile\.cloudflared\ if running as a service).
+#
+# ==============================================================================
+# 3. CREATE THE TUNNEL
+# ==============================================================================
+#
+# Create a named tunnel. Replace "logix-mcp" with your preferred tunnel name.
+#
+#   cloudflared tunnel create logix-mcp
+#
+# Output will show:
+#   - Tunnel ID (e.g., 12345678-1234-1234-1234-123456789abc)
+#   - Credentials file path (e.g., C:\Users\Administrator\.cloudflared\12345678-1234-1234-1234-123456789abc.json)
+#
+# SAVE THE TUNNEL ID AND CREDENTIALS FILE PATH. You need them below.
+#
+# ==============================================================================
+# 4. CONFIGURE THE TUNNEL (config.yml)
+# ==============================================================================
+#
+# Create the cloudflared configuration file. The standard location is:
+#   %USERPROFILE%\.cloudflared\config.yml
+# or for service mode:
+#   C:\Windows\System32\config\systemprofile\.cloudflared\config.yml
+#
+# Example config.yml content:
+#
+#   tunnel: 12345678-1234-1234-1234-123456789abc
+#   credentials-file: C:\Users\Administrator\.cloudflared\12345678-1234-1234-1234-123456789abc.json
+#
+#   ingress:
+#     # Route traffic for this hostname to the local MCP server
+#     - hostname: logix-mcp.your-domain.com
+#       service: http://localhost:8765
+#       originRequest:
+#         # SSE connections are long-lived; disable timeouts
+#         noTLSVerify: false
+#         connectTimeout: 30s
+#         # Keep alive for SSE streams
+#         keepAliveConnections: 100
+#         keepAliveTimeout: 1m30s
+#     # Catch-all rule (required, must be last)
+#     - service: http_status:404
+#
+# ==============================================================================
+# 5. CREATE DNS RECORD IN CLOUDFLARE DASHBOARD
+# ==============================================================================
+#
+# Option A: Using cloudflared CLI (easiest)
+#
+#   cloudflared tunnel route dns logix-mcp logix-mcp.your-domain.com
+#
+# This automatically creates a CNAME record pointing your hostname to the tunnel.
+#
+# Option B: Manual via Cloudflare Dashboard
+#
+#   1. Go to https://dash.cloudflare.com/
+#   2. Select your domain (your-domain.com)
+#   3. Go to DNS > Records
+#   4. Add a CNAME record:
+#      - Type: CNAME
+#      - Name: logix-mcp
+#      - Target: 12345678-1234-1234-1234-123456789abc.cfargotunnel.com
+#      - Proxy status: Proxied (orange cloud)
+#
+# ==============================================================================
+# 6. INSTALL CLOUDFLARED AS A WINDOWS SERVICE
+# ==============================================================================
+#
+# Running cloudflared as a service ensures it starts automatically on boot.
+#
+# IMPORTANT: Run these commands from an elevated (Administrator) command prompt.
+#
+# 1. Install the service:
+#
+#   cloudflared service install
+#
+# 2. The service reads config from:
+#      C:\Windows\System32\config\systemprofile\.cloudflared\config.yml
+#
+#    Copy your config.yml and credentials JSON to that directory, OR
+#    set the config path via registry (not recommended).
+#
+#    Alternative: Use the --config flag when installing:
+#
+#      cloudflared --config C:\path\to\your\config.yml service install
+#
+# 3. Start the service:
+#
+#   sc start cloudflared
+#   # or
+#   net start cloudflared
+#
+# 4. Verify service status:
+#
+#   sc query cloudflared
+#   # or check Cloudflare Zero Trust dashboard > Networks > Tunnels
+#
+# 5. To uninstall the service (if needed):
+#
+#   cloudflared service uninstall
+#
+# ==============================================================================
+# 7. RUN THE MCP SERVER AS A WINDOWS SERVICE (OPTIONAL BUT RECOMMENDED)
+# ==============================================================================
+#
+# Use NSSM (Non-Sucking Service Manager) to run the Python MCP server as a service.
+#
+# 1. Download NSSM: https://nssm.cc/download
+# 2. Install the service:
+#
+#   nssm install LogixMCPServer "C:\path\to\logix-mcp\.venv\Scripts\python.exe" "-m fastmcp run src\logix_mcp\server.py:create_app --transport sse --host 127.0.0.1 --port 8765"
+#
+# 3. Set environment variables for the service:
+#
+#   nssm set LogixMCPServer AppEnvironmentExtra LOGIX_MCP_TOKEN=your-secret-token-here
+#
+# 4. Start the service:
+#
+#   nssm start LogixMCPServer
+#
+# ==============================================================================
+# 8. FIREWALL / NETWORK NOTES
+# ==============================================================================
+#
+# - cloudflared makes OUTBOUND connections to Cloudflare on port 7844 (TCP/UDP).
+#   No inbound firewall rules are required.
+# - The MCP server binds ONLY to 127.0.0.1:8765 (localhost). It is never exposed
+#   directly to the network.
+# - If your corporate network blocks outbound 7844, cloudflared supports
+#   fallback to HTTPS port 443, but performance may degrade.
+#
+# ==============================================================================
+# 9. SECURITY CHECKLIST
+# ==============================================================================
+#
+# [ ] LOGIX_MCP_TOKEN is set to a long, random string (32+ characters)
+# [ ] MCP server binds to 127.0.0.1, not 0.0.0.0
+# [ ] cloudflared config ingress only routes your specific hostname
+# [ ] Catch-all ingress rule returns 404 for unknown hostnames
+# [ ] Studio 5000 project files are backed up before remote operations
+# [ ] Windows firewall allows outbound TCP/UDP 7844
+#
+# ==============================================================================
+# 10. TROUBLESHOOTING
+# ==============================================================================
+#
+# Tunnel shows "Down" in dashboard:
+#   - Check cloudflared service is running: sc query cloudflared
+#   - Check config.yml tunnel ID matches credentials file name
+#   - Check DNS CNAME target matches <tunnel-id>.cfargotunnel.com
+#
+# 502 Bad Gateway:
+#   - MCP server is not running on localhost:8765
+#   - Check: curl http://localhost:8765/sse (should return SSE stream or 401)
+#
+# Authentication errors from Hermes:
+#   - LOGIX_MCP_TOKEN env var not set on Windows side
+#   - Token mismatch between Windows and Hermes config
+#   - Token contains special characters not properly escaped in YAML
+#
+# High latency / timeouts on large L5K exports:
+#   - SSE over Cloudflare Tunnel adds ~50-200ms baseline latency
+#   - Files >50MB may hit Cloudflare timeout limits; consider chunked export
+#   - Check Cloudflare Zero Trust > Settings > Network > Timeout settings
+#
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# EXAMPLE CONFIG.YML (copy to %USERPROFILE%\.cloudflared\config.yml)
+# ------------------------------------------------------------------------------
+
+tunnel: YOUR-TUNNEL-ID-HERE
+credentials-file: C:\Users\Administrator\.cloudflared\YOUR-TUNNEL-ID-HERE.json
+
+ingress:
+  - hostname: logix-mcp.your-domain.com
+    service: http://localhost:8765
+    originRequest:
+      noTLSVerify: false
+      connectTimeout: 30s
+      keepAliveConnections: 100
+      keepAliveTimeout: 1m30s
+  - service: http_status:404

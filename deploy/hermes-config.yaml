@@ -1,0 +1,90 @@
+# ==============================================================================
+# Hermes MCP Client Configuration for Logix SDK Server
+# ==============================================================================
+# Copy this block into your ~/.hermes/config.yaml file under the mcp_servers
+# section, or merge it if the section already exists.
+#
+# After merging, restart Hermes (or reload config) for the new MCP server
+# to appear as available tools.
+#
+# Prerequisites:
+#   1. The Logix MCP Server is running on the Windows machine
+#   2. Cloudflare Tunnel is configured and routing traffic
+#   3. You have the shared Bearer token (LOGIX_MCP_TOKEN)
+#
+# ==============================================================================
+
+mcp_servers:
+  logix-sdk:
+    # Use SSE (Server-Sent Events) transport — this is what FastMCP serves
+    # on /sse endpoint.
+    transport: sse
+
+    # Public URL exposed via Cloudflare Tunnel.
+    # Replace "logix-mcp.your-domain.com" with your actual hostname.
+    # Keep the /sse path — FastMCP mounts the SSE endpoint there by default.
+    url: https://logix-mcp.your-domain.com/sse
+
+    # Authentication headers sent with every request.
+    # The server validates this against its LOGIX_MCP_TOKEN environment variable.
+    # Use environment variable expansion so the token isn't hard-coded in this file.
+    headers:
+      Authorization: "Bearer ${LOGIX_MCP_TOKEN}"
+
+    # Connection timeout in seconds.
+    # SSE connections are long-lived; this is only for initial handshake.
+    connect_timeout: 30
+
+    # Optional: request timeout for individual tool calls.
+    # Some operations (e.g., large L5K exports) may take 10-60 seconds.
+    # Adjust based on your network latency and Studio 5000 performance.
+    # request_timeout: 120
+
+    # Optional: retry configuration for transient network failures.
+    # retry:
+    #   max_attempts: 3
+    #   backoff_seconds: 2
+
+# ==============================================================================
+# ENVIRONMENT VARIABLE SETUP
+# ==============================================================================
+#
+# Before starting Hermes, export the token in your shell:
+#
+#   export LOGIX_MCP_TOKEN="your-secret-token-here"
+#
+# Or add it to your ~/.bashrc, ~/.zshrc, or systemd service file so it's
+# always available.
+#
+# To generate a secure token:
+#
+#   python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+#
+# IMPORTANT: The token must match exactly on both sides:
+#   - Windows: setx LOGIX_MCP_TOKEN "same-value"
+#   - Linux:   export LOGIX_MCP_TOKEN="same-value"
+#
+# ==============================================================================
+# VERIFYING THE CONNECTION
+# ==============================================================================
+#
+# 1. Start Hermes with the updated config.
+# 2. In Hermes, run:
+#
+#      /mcp list
+#
+#    You should see "logix-sdk" listed with status "connected".
+#
+# 3. Test a tool call:
+#
+#      /mcp call logix-sdk sdk_get_info
+#
+#    Expected response includes SDK version, Studio 5000 status, and license info.
+#
+# If the server shows "disconnected" or "error":
+#   - Check the Cloudflare Tunnel is up in the Zero Trust dashboard
+#   - Verify the URL resolves: curl -v https://logix-mcp.your-domain.com/sse
+#   - Check Hermes logs for connection errors
+#   - Verify LOGIX_MCP_TOKEN is exported in the Hermes process environment
+#
+# ==============================================================================
