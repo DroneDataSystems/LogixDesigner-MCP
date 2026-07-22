@@ -11,15 +11,15 @@ r = subprocess.run(
     capture_output=True, text=True
 )
 payload = bytes.fromhex(r.stdout.strip().split("\t")[-1])
-auth_msg = payload[14:]  # Entire gRPC message including 5-byte header
-print(f"Auth message: {len(auth_msg)}B")
-print(f"Auth header: compression={auth_msg[0]}, length={int.from_bytes(auth_msg[1:5], 'big')}")
+auth_raw = payload[14:]  # skip HTTP/2 (9B) + gRPC frame (5B) = raw protobuf
+print(f"Auth proto: {len(auth_raw)}B")
+print(f"First bytes: {auth_raw[:20].hex()}")
 
 # Read ACD
 acd = open(ACD, 'rb').read()
 print(f"ACD: {len(acd)}B")
 
-# Build raw gRPC stream
+# Build raw gRPC stream — library handles gRPC framing
 channel = grpc.insecure_channel('localhost:53204')
 stub = channel.stream_unary(
     '/LSDKMessages.LogixSDK/Open',
@@ -28,18 +28,10 @@ stub = channel.stream_unary(
 )
 
 def chunks():
-    yield auth_msg  # message 1: auth (with gRPC header)
+    yield auth_raw  # message 1: raw protobuf (auth token)
     chunk_size = 30000
     for i in range(0, len(acd), chunk_size):
-        data = acd[i:i+chunk_size]
-        hdr = bytes([
-            0,
-            (len(data) >> 24) & 0xff,
-            (len(data) >> 16) & 0xff,
-            (len(data) >> 8) & 0xff,
-            len(data) & 0xff
-        ])
-        yield hdr + data
+        yield acd[i:i+chunk_size]
 
 print("Sending...")
 try:
