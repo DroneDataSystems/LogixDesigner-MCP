@@ -34,30 +34,17 @@ cap = subprocess.Popen(
 time.sleep(1)
 print(f"  Capture PID: {cap.pid}")
 
-# ── Step 3: Open project via SDK ──────────────────────────────────────
+# ── Step 3: Open project via SDK directly ──────────────────────────────
 print("=== Step 3: Opening project ===")
-# Use the MCP server's SDK — it will trigger a fresh Open gRPC call
-# We call the server's HTTP endpoint to open a project
-import urllib.request, json
+sys.path.insert(0, r"C:\projects\LogixDesigner-MCP\src")
+from logix_mcp.sdk_interop_real import RealSdkInterop
 try:
-    req = urllib.request.Request(
-        "http://localhost:8765/sse/messages",
-        data=json.dumps({
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "tools/call",
-            "params": {
-                "name": "open_project",
-                "arguments": {"path": PROJECT}
-            }
-        }).encode(),
-        headers={"Content-Type": "application/json"}
-    )
-    resp = urllib.request.urlopen(req, timeout=60)
-    result = json.loads(resp.read())
-    print(f"  SDK response: {json.dumps(result)[:200]}")
+    sdk = RealSdkInterop()
+    info = sdk.open_project(PROJECT)
+    print(f"  Opened: {info}")
+    sdk.close_project()
 except Exception as e:
-    print(f"  SDK error: {e}")
+    print(f"  Error: {e}")
 
 time.sleep(2)
 
