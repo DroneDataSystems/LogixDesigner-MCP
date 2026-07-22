@@ -105,27 +105,43 @@ def _parse_tag_block(lines: list[str], i: int, scope: str):
         if not stripped or stripped.startswith("//"):
             continue
 
-        # Tag format: name TYPE (Description := "...", ...) OptionalModifiers := value;
-        # Or: name TYPE := value;  (alias)
-        m = re.match(r'(\w+)\s+(\w+)\s*(.*)', stripped)
-        if m:
-            name = m.group(1)
-            dtype = m.group(2)
-            rest = m.group(3)
+        # Tag format variations:
+        #   name TYPE (params...) := value;
+        #   name OF alias_tag[member] (params...);
+        #   name : TYPE[dim] (params...) := value;
+        #   name : TYPE[dim] (params...);
+        m = re.match(r'(\w+(?:\s*\[[^\]]+\])?)\s*(OF|:)?\s*(\w+)\s*(.*)', stripped)
+        if not m:
+            continue
+        
+        name = m.group(1).strip()
+        is_alias = (m.group(2) == "OF")
+        dtype = m.group(3) if not is_alias else "ALIAS"
+        rest = m.group(4).strip()
 
-            # Accumulate multi-line if rest has unmatched parens
-            while rest.count("(") > rest.count(")") and i < len(lines):
-                rest += " " + lines[i].strip()
-                i += 1
+        # Accumulate multi-line if rest has unmatched parens
+        while rest.count("(") > rest.count(")") and i < len(lines):
+            rest += " " + lines[i].strip()
+            i += 1
 
+        alias_for = None
+        if is_alias:
+            # "OF SomeTag[0] (params...)" — extract the alias target
+            alias_m = re.match(r'(\w+(?:\[[^\]]*\])?)', rest)
+            if alias_m:
+                alias_for = alias_m.group(1)
+        else:
             alias_m = re.search(r":=\s*(\S+)", rest)
-            tags.append(TagDef(
-                name=name,
-                data_type=dtype,
-                tag_type="Alias" if alias_m else "Base",
-                alias_for=alias_m.group(1) if alias_m else None,
-                scope=scope,
-            ))
+            if alias_m:
+                alias_for = alias_m.group(1).rstrip(";")
+
+        tags.append(TagDef(
+            name=name,
+            data_type=dtype,
+            tag_type="Alias" if (is_alias or alias_for) else "Base",
+            alias_for=alias_for,
+            scope=scope,
+        ))
 
     return tags, i
 

@@ -97,18 +97,18 @@ class L5KParser:
     def _parse_controller_body(self):
         while self.pos < len(self.lines):
             line = self.lines[self.pos].strip()
+            self.pos += 1
 
             if line.startswith("END_CONTROLLER"):
-                self.pos += 1
                 return
             elif line == "TAG":
+                self.pos -= 1  # back up so _parse_tag_block sees the TAG line
                 self._parse_tag_block("controller")
             elif line.startswith("PROGRAM "):
-                self.controller.programs.append(self._parse_program(line))
+                self.pos -= 1
+                self.controller.programs.append(self._parse_program(self.lines[self.pos].strip()))
             elif line.startswith("DATATYPE "):
                 self.controller.data_types.append(self._parse_datatype(line))
-            else:
-                self.pos += 1
 
     def _parse_tag_block(self, scope: str):
         """Parse TAG ... END_TAG block."""
