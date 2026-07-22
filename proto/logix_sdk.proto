@@ -1,0 +1,265 @@
+// Logix Designer SDK gRPC Service — Reconstructed Protocol
+// Based on: C# client XML docs v2.2.1109 + LdSdkServer.dll string analysis
+// Server: .NET 10.0 gRPC on TCP 53204
+// Proto namespace: LogixDesignerSDK
+
+syntax = "proto3";
+
+package logix_designer_sdk;
+
+// ── Enums ─────────────────────────────────────────────────────────────
+
+enum OperationMode {
+    OFFLINE = 0;
+    ONLINE = 1;
+}
+
+enum RequestedControllerMode {
+    RUN = 0;
+    PROGRAM = 1;
+    TEST = 2;
+}
+
+enum ControllerMode {
+    RUN_MODE = 0;
+    PROGRAM_MODE = 1;
+    FAULTED = 2;
+    TEST_MODE = 3;
+}
+
+enum ConnectedState {
+    UNKNOWN = 0;
+    OFFLINE_STATE = 1;
+    CONNECTED = 2;
+    ONLINE_STATE = 3;
+}
+
+enum DataType {
+    BYTE_ARRAY = 0;
+    BOOL = 1;
+    SINT = 2;
+    INT = 3;
+    DINT = 4;
+    LINT = 5;
+    USINT = 6;
+    UINT = 7;
+    UDINT = 8;
+    ULINT = 9;
+    STRING = 10;
+    REAL = 11;
+    LREAL = 12;
+}
+
+// ── Project Operations ────────────────────────────────────────────────
+
+message OpenProjectRequest {
+    string project_path = 1;
+}
+
+message OpenProjectResponse {
+    bool success = 1;
+    string error_message = 2;
+}
+
+message ConvertRequest {
+    string project_path = 1;
+    int32 destination_revision = 2;
+}
+
+message ConvertResponse {
+    bool success = 1;
+    string error_message = 2;
+}
+
+message SaveAsRequest {
+    string output_path = 1;
+    bool force = 2;
+    bool detailed_l5x = 3;
+}
+
+message SaveAsResponse {
+    bool success = 1;
+    string error_message = 2;
+}
+
+message CloseRequest {}
+
+message CloseResponse {
+    bool success = 1;
+}
+
+// ── Controller Operations ─────────────────────────────────────────────
+
+message GetCommunicationsPathResponse {
+    string path = 1;
+}
+
+message SetCommunicationsPathRequest {
+    string path = 1;
+}
+
+message ControllerModeResponse {
+    ControllerMode mode = 1;
+}
+
+message ChangeControllerModeRequest {
+    RequestedControllerMode mode = 1;
+}
+
+message ConnectedStateResponse {
+    ConnectedState state = 1;
+}
+
+message ChangeProcessorTypeRequest {
+    string processor_type_name = 1;
+}
+
+// ── Tag Operations ────────────────────────────────────────────────────
+
+message GetTagValueRequest {
+    string tag_name = 1;
+    OperationMode mode = 2;
+    DataType type = 3;
+}
+
+message GetTagValueResponse {
+    bytes value = 1;  // Raw bytes — typed wrappers decode per DataType
+}
+
+message SetTagValueRequest {
+    string tag_name = 1;
+    OperationMode mode = 2;
+    bytes value = 3;
+    DataType type = 4;
+}
+
+message SetTagValueResponse {
+    bool success = 1;
+}
+
+// ── Structure Operations ──────────────────────────────────────────────
+
+message GetAllExecutablesResponse {
+    repeated string xpaths = 1;
+}
+
+message PartialExportRequest {
+    string xpath = 1;
+    string output_file_path = 2;
+}
+
+message PartialExportResponse {
+    bool success = 1;
+    string error_message = 2;
+}
+
+message PartialImportRequest {
+    string xml_file_path = 1;
+    string destination_xpath = 2;
+    int32 collision_option = 3;  // 0=Overwrite, 1=Discard, 2=Cancel
+    bool use_target = 4;
+}
+
+message PartialImportResponse {
+    bool success = 1;
+}
+
+message PartialImportRungsRequest {
+    string xml_file_path = 1;
+    uint32 start_rung = 2;
+    uint32 end_rung = 3;
+    string destination_xpath = 4;
+    int32 partial_import_option = 5;
+}
+
+// ── Event Streaming ───────────────────────────────────────────────────
+
+message OperationEvent {
+    string operation_name = 1;
+    string status = 2;  // "OK" or "FAIL"
+    string message = 3;
+}
+
+message OperationResponse {
+    oneof result {
+        string string_result = 1;
+        uint32 uint_result = 2;
+        bytes bytes_result = 3;
+        bool bool_result = 4;
+        GetTagValueResponse tag_result = 5;
+        GetAllExecutablesResponse executables_result = 6;
+        ControllerModeResponse mode_result = 7;
+        ConnectedStateResponse state_result = 8;
+        OperationEvent event = 9;
+    }
+}
+
+// ── gRPC Service ──────────────────────────────────────────────────────
+
+service LogixProjectServices {
+    // Project Lifecycle
+    rpc OpenProject(OpenProjectRequest) returns (stream OperationResponse);
+    rpc Convert(ConvertRequest) returns (stream OperationResponse);
+    rpc SaveAs(SaveAsRequest) returns (stream OperationResponse);
+    rpc Save(CloseRequest) returns (stream OperationResponse);
+    rpc Close(CloseRequest) returns (stream OperationResponse);
+
+    // Controller Operations
+    rpc GetCommunicationsPath(CloseRequest) returns (stream OperationResponse);
+    rpc SetCommunicationsPath(SetCommunicationsPathRequest) returns (stream OperationResponse);
+    rpc ChangeProcessorType(ChangeProcessorTypeRequest) returns (stream OperationResponse);
+    rpc ReadControllerMode(CloseRequest) returns (stream OperationResponse);
+    rpc ChangeControllerMode(ChangeControllerModeRequest) returns (stream OperationResponse);
+    rpc GoOnline(CloseRequest) returns (stream OperationResponse);
+    rpc GoOffline(CloseRequest) returns (stream OperationResponse);
+    rpc ReadConnectedState(CloseRequest) returns (stream OperationResponse);
+    rpc Download(CloseRequest) returns (stream OperationResponse);
+    rpc Upload(CloseRequest) returns (stream OperationResponse);
+    rpc Build(CloseRequest) returns (stream OperationResponse);
+
+    // Tag Operations
+    rpc GetTagValue(GetTagValueRequest) returns (stream OperationResponse);
+    rpc GetTagValueBOOL(GetTagValueRequest) returns (stream OperationResponse);
+    rpc GetTagValueSINT(GetTagValueRequest) returns (stream OperationResponse);
+    rpc GetTagValueINT(GetTagValueRequest) returns (stream OperationResponse);
+    rpc GetTagValueDINT(GetTagValueRequest) returns (stream OperationResponse);
+    rpc GetTagValueLINT(GetTagValueRequest) returns (stream OperationResponse);
+    rpc GetTagValueUSINT(GetTagValueRequest) returns (stream OperationResponse);
+    rpc GetTagValueUINT(GetTagValueRequest) returns (stream OperationResponse);
+    rpc GetTagValueUDINT(GetTagValueRequest) returns (stream OperationResponse);
+    rpc GetTagValueULINT(GetTagValueRequest) returns (stream OperationResponse);
+    rpc GetTagValueREAL(GetTagValueRequest) returns (stream OperationResponse);
+    rpc GetTagValueLREAL(GetTagValueRequest) returns (stream OperationResponse);
+    rpc GetTagValueSTRING(GetTagValueRequest) returns (stream OperationResponse);
+    rpc SetTagValue(SetTagValueRequest) returns (stream OperationResponse);
+    rpc SetTagValueBOOL(SetTagValueRequest) returns (stream OperationResponse);
+    rpc SetTagValueSINT(SetTagValueRequest) returns (stream OperationResponse);
+    rpc SetTagValueINT(SetTagValueRequest) returns (stream OperationResponse);
+    rpc SetTagValueDINT(SetTagValueRequest) returns (stream OperationResponse);
+    rpc SetTagValueLINT(SetTagValueRequest) returns (stream OperationResponse);
+    rpc SetTagValueUSINT(SetTagValueRequest) returns (stream OperationResponse);
+    rpc SetTagValueUINT(SetTagValueRequest) returns (stream OperationResponse);
+    rpc SetTagValueUDINT(SetTagValueRequest) returns (stream OperationResponse);
+    rpc SetTagValueULINT(SetTagValueRequest) returns (stream OperationResponse);
+    rpc SetTagValueREAL(SetTagValueRequest) returns (stream OperationResponse);
+    rpc SetTagValueLREAL(SetTagValueRequest) returns (stream OperationResponse);
+    rpc SetTagValueSTRING(SetTagValueRequest) returns (stream OperationResponse);
+
+    // Structure
+    rpc GetAllExecutables(CloseRequest) returns (stream OperationResponse);
+    rpc PartialExportToXmlFile(PartialExportRequest) returns (stream OperationResponse);
+    rpc PartialImportFromXmlFile(PartialImportRequest) returns (stream OperationResponse);
+    rpc PartialImportRungsFromXmlFile(PartialImportRungsRequest) returns (stream OperationResponse);
+
+    // Event Streaming
+    rpc GetEvent(CloseRequest) returns (stream OperationEvent);
+
+    // Safety
+    rpc GetSafetyNetworkNumber(CloseRequest) returns (stream OperationResponse);
+    rpc IsSafetyLocked(CloseRequest) returns (stream OperationResponse);
+    rpc SafetyLock(CloseRequest) returns (stream OperationResponse);
+    rpc SafetyUnlock(CloseRequest) returns (stream OperationResponse);
+    rpc GenerateSafetySignature(CloseRequest) returns (stream OperationResponse);
+    rpc DeleteSafetySignature(CloseRequest) returns (stream OperationResponse);
+    rpc GetSafetySignature(CloseRequest) returns (stream OperationResponse);
+}
