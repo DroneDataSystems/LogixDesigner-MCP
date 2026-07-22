@@ -1,0 +1,60 @@
+// LSDKMessages.LogixSDK — Confirmed + likely method names
+
+syntax = "proto3";
+package lsdkmessages;
+
+service LogixSDK {
+    // Confirmed from WireMCP capture
+    rpc GetAllExecutables(EmptyRequest) returns (stream OperationResponse);
+    rpc ExportToL5X(ExportRequest) returns (stream OperationResponse);
+    rpc PartialExportToXmlFile(PartialExportRequest) returns (stream OperationResponse);
+    rpc KeepAlive(EmptyRequest) returns (stream OperationResponse);
+
+    // Likely (from C# API docs — tested next):
+    rpc OpenLogixProject(OpenProjectRequest) returns (stream OperationResponse);
+    rpc Convert(ConvertRequest) returns (stream OperationResponse);
+    rpc SaveAs(SaveAsRequest) returns (stream OperationResponse);
+    rpc Close(EmptyRequest) returns (stream OperationResponse);
+}
+
+message EmptyRequest {}
+
+message OpenProjectRequest {
+    string project_path = 1;
+}
+
+message ConvertRequest {
+    string project_path = 1;
+    int32 destination_revision = 2;
+}
+
+message SaveAsRequest {
+    string output_path = 1;
+    bool force = 2;
+    bool detailed_l5x = 3;
+}
+
+message ExportRequest {
+    string output_path = 1;
+    bool force = 2;
+}
+
+message PartialExportRequest {
+    string xpath = 1;
+    string output_file_path = 2;
+}
+
+message OperationResponse {
+    oneof result {
+        string string_result = 1;
+        uint32 uint_result = 2;
+        bytes bytes_result = 3;
+        bool bool_result = 4;
+        StringList executables_result = 5;
+        string error_message = 6;
+    }
+}
+
+message StringList {
+    repeated string items = 1;
+}
