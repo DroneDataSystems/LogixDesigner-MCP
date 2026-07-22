@@ -11,8 +11,8 @@ r = subprocess.run(
 hexdata = r.stdout.strip().split("\t")[-1]
 data = bytes.fromhex(hexdata)
 
-# Skip HTTP/2 DATA frame header (9 bytes), then gRPC header (5 bytes)
-proto = data[14:]
+# Skip HTTP/2 DATA frame header (9 bytes) + gRPC header (5 bytes) + custom 8-byte prefix
+proto = data[22:]
 
 # Parse protobuf
 pos = 0
