@@ -23,7 +23,7 @@ subprocess.run(["sc", "stop", SERVICE], capture_output=True, timeout=30)
 time.sleep(3)
 subprocess.run(["sc", "start", SERVICE], capture_output=True, timeout=30)
 print("  Service restart initiated")
-time.sleep(5)  # Let FastMCP start up
+time.sleep(8)  # Let FastMCP start up and connect to LdSdkServer
 
 # ── Step 2: Start capture ────────────────────────────────────────────
 print("=== Step 2: Starting capture ===")
@@ -41,7 +41,7 @@ print("=== Step 3: Opening project ===")
 import urllib.request, json
 try:
     req = urllib.request.Request(
-        "http://localhost:8765/messages",
+        "http://localhost:8765/sse/messages",
         data=json.dumps({
             "jsonrpc": "2.0",
             "id": 1,
@@ -69,19 +69,18 @@ print("  Capture stopped")
 
 # ── Step 5: Extract Open request protobuf ─────────────────────────────
 print("=== Step 5: Extracting Open request protobuf ===")
-# Use tshark to find the Open frame and dump its protobuf fields
+# Use tshark to find frames with data and search for the Open pattern
 result = subprocess.run(
-    [TSHARK, "-r", PCAP_PATH, "-Y", "grpc", "-T", "fields",
-     "-e", "frame.number", "-e", "grpc.msg_type", "-e", "grpc.request.method",
-     "-e", "data.data"],
+    [TSHARK, "-r", PCAP_PATH, "-Y", "data", "-T", "fields",
+     "-e", "frame.number", "-e", "data.data"],
     capture_output=True, text=True, timeout=15
 )
 
 open_frame_data = []
 for line in result.stdout.splitlines():
-    if "/LSDKMessages.LogixSDK/Open" in line:
+    if "4c53444b4d657373616765732e4c6f67697853444b2f4f70656e" in line:  # LSDKMessages.LogixSDK/Open hex
         parts = line.split("\t")
-        print(f"  Found Open in frame {parts[0]}: {line[:150]}")
+        print(f"  Found Open in frame {parts[0]}")
         open_frame_data.append(parts)
 
 # ── Step 6: Decode protobuf ──────────────────────────────────────────
