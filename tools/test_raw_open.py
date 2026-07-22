@@ -12,32 +12,39 @@ r = subprocess.run(
 )
 payload = bytes.fromhex(r.stdout.strip().split("\t")[-1])
 auth_raw = payload[14:]  # skip HTTP/2 (9B) + gRPC frame (5B) = raw protobuf
+# The first 8 bytes are metadata prefix (field 1 fixed64=1, field 2 fixed64=6)
+# Then field 15 is the auth token
+# Let's try with AND without the prefix
+auth_no_prefix = auth_raw[8:]
 print(f"Auth proto: {len(auth_raw)}B")
-print(f"First bytes: {auth_raw[:20].hex()}")
+print(f"First bytes (with prefix): {auth_raw[:30].hex()}")
+print(f"First bytes (no prefix): {auth_no_prefix[:30].hex()}")
 
 # Read ACD
 acd = open(ACD, 'rb').read()
 print(f"ACD: {len(acd)}B")
 
-# Build raw gRPC stream — library handles gRPC framing
-channel = grpc.insecure_channel('localhost:53204')
-stub = channel.stream_unary(
-    '/LSDKMessages.LogixSDK/Open',
-    request_serializer=lambda x: x,
-    response_deserializer=lambda x: x
-)
+# Try both formats
+for label, auth in [("with prefix", auth_raw), ("no prefix", auth_no_prefix)]:
+    print(f"\n--- Trying {label} ---")
+    channel = grpc.insecure_channel('localhost:53204')
+    stub = channel.stream_unary(
+        '/LSDKMessages.LogixSDK/Open',
+        request_serializer=lambda x: x,
+        response_deserializer=lambda x: x
+    )
 
-def chunks():
-    yield auth_raw  # message 1: raw protobuf (auth token)
-    chunk_size = 30000
-    for i in range(0, len(acd), chunk_size):
-        yield acd[i:i+chunk_size]
+    def chunks(a=auth):
+        yield a
+        chunk_size = 30000
+        for i in range(0, len(acd), chunk_size):
+            yield acd[i:i+chunk_size]
 
-print("Sending...")
-try:
-    result = stub.future(chunks(), timeout=30)
-    print(f"RESP: {result.result()[:500]}")
-except Exception as e:
-    print(f"ERR: {str(e)[:200]}")
+    try:
+        result = stub.future(chunks(), timeout=30)
+        print(f"  RESP: {result.result()[:300]}")
+    except Exception as e:
+        print(f"  ERR: {str(e)[:150]}")
+    channel.close()
 
 channel.close()
