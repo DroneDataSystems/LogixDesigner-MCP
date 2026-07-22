@@ -30,16 +30,16 @@ stub = pb_grpc.LogixSDKStub(channel)
 
 # Build the streaming request
 def request_iterator():
-    # Message 1: auth token
-    chunk1 = pb.FileChunk()
-    chunk1.auth_token = auth_token
+    # Message 1: auth token in field 1
+    chunk1 = pb.OpenChunk()
+    chunk1.field_1 = auth_token
     yield chunk1
 
-    # Messages 2-N: file data in 30KB chunks
+    # Messages 2-N: file data in field 2
     chunk_size = 30000
     for i in range(0, len(acd_data), chunk_size):
-        chunk = pb.FileChunk()
-        chunk.file_data = acd_data[i:i+chunk_size]
+        chunk = pb.OpenChunk()
+        chunk.field_2 = acd_data[i:i+chunk_size]
         yield chunk
 
 print("Sending Open request...")

@@ -1,51 +1,26 @@
-// Logix Designer SDK gRPC Protocol — Verified from Wire Capture
-// Service: LSDKMessages.LogixSDK
-// Server: Kestrel (ASP.NET Core), gRPC-dotnet 2.76.0
+// Fixed: Open uses separate message types per chunk, not a oneof
 
 syntax = "proto3";
 package lsdkmessages;
 
 service LogixSDK {
-    // ── Confirmed from WireMCP capture ──
-
-    // Open: client-streaming. Msg 1 = FactoryTalk auth, Msg 2+ = ACD file data.
-    rpc Open(stream FileChunk) returns (stream OperationResponse);
-
-    // GetAllExecutables: returns program/routine XPaths
+    rpc Open(stream OpenChunk) returns (stream OperationResponse);
     rpc GetAllExecutables(EmptyRequest) returns (stream OperationResponse);
-
-    // ExportToL5X: triggers L5X export (SaveAs with L5X extension)
     rpc ExportToL5X(ExportRequest) returns (stream OperationResponse);
-
-    // PartialExportToXmlFile: exports a subtree by XPath
     rpc PartialExportToXmlFile(PartialExportRequest) returns (stream OperationResponse);
-
-    // KeepAlive: heartbeat pings
     rpc KeepAlive(EmptyRequest) returns (stream OperationResponse);
 }
 
-// ── Open (client-streaming) ──────────────────────────────────────────
-
-message FileChunk {
-    oneof payload {
-        bytes auth_token = 1;  // FactoryTalk JWT (1656B base64 in first message)
-        bytes file_data = 2;   // ACD file contents in 30KB chunks
-    }
+// Open is client-streaming. First message carries the auth token in field 1.
+// Subsequent messages carry file data in field 2.
+message OpenChunk {
+    bytes field_1 = 1;   // auth token in first message
+    bytes field_2 = 2;   // file data in subsequent messages
 }
-
-// ── Standard messages ────────────────────────────────────────────────
 
 message EmptyRequest {}
-
-message ExportRequest {
-    string output_path = 1;
-    bool force = 2;
-}
-
-message PartialExportRequest {
-    string xpath = 1;
-    string output_file_path = 2;
-}
+message ExportRequest { string output_path = 1; bool force = 2; }
+message PartialExportRequest { string xpath = 1; string output_file_path = 2; }
 
 message OperationResponse {
     oneof result {
@@ -58,6 +33,4 @@ message OperationResponse {
     }
 }
 
-message StringList {
-    repeated string items = 1;
-}
+message StringList { repeated string items = 1; }
