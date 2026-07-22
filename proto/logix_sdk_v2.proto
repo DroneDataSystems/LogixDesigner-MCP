@@ -1,0 +1,51 @@
+// Logix Designer SDK gRPC Protocol — Verified from Wire Capture
+// Service: LSDKMessages.LogixSDK
+// Server: .NET 10.0, gRPC-dotnet 2.76.0
+// Confirmed methods: GetAllExecutables, KeepAlive, ExportToL5X, PartialExportToXmlFile
+
+syntax = "proto3";
+
+package lsdkmessages;
+
+// ── Service ──────────────────────────────────────────────────────────
+
+service LogixSDK {
+    rpc GetAllExecutables(EmptyRequest) returns (stream OperationResponse);
+    rpc ExportToL5X(ExportRequest) returns (stream OperationResponse);
+    rpc PartialExportToXmlFile(PartialExportRequest) returns (stream OperationResponse);
+    rpc KeepAlive(EmptyRequest) returns (stream OperationResponse);
+    // Remaining methods (to be confirmed via capture):
+    // OpenProject, Convert, SaveAs, Save, Close, GetTagValue*, SetTagValue*,
+    // Download, Upload, Build, GoOnline, GoOffline, etc.
+}
+
+// ── Messages ─────────────────────────────────────────────────────────
+
+message EmptyRequest {}
+
+message ExportRequest {
+    string session_id = 1;
+    string output_path = 2;
+    bool force = 3;
+}
+
+message PartialExportRequest {
+    string session_id = 1;
+    string xpath = 2;
+    string output_file_path = 3;
+}
+
+message OperationResponse {
+    oneof result {
+        string string_result = 1;
+        uint32 uint_result = 2;
+        bytes bytes_result = 3;
+        bool bool_result = 4;
+        StringList executables_result = 5;  // GetAllExecutables
+        string error_message = 6;
+    }
+}
+
+message StringList {
+    repeated string items = 1;
+}
