@@ -5,18 +5,20 @@ TSHARK = r"C:\Program Files\Wireshark\tshark.exe"
 PCAP = r"C:\temp\grpc_live_auth.pcapng"
 PROJECT = r"C:\Users\MaB Technologies\Documents\PLC Projects\Mativ\Mativ_Sim.ACD"
 
+# 0. RESTART the service to force fresh auth
+print("Restarting LogixMCPServer...")
+subprocess.run(["sc", "stop", "LogixMCPServer"], capture_output=True, timeout=30)
+time.sleep(3)
+subprocess.run(["sc", "start", "LogixMCPServer"], capture_output=True, timeout=30)
+time.sleep(5)
+
 # Add SDK to path
 sys.path.insert(0, r"C:\projects\LogixDesigner-MCP\src")
 
 # 1. Close any open project to ensure fresh connection
 from logix_mcp.sdk_interop_real import RealSdkInterop
-sdk = RealSdkInterop()
-try:
-    sdk.close_project()
-except:
-    pass
 
-# 2. Start capture
+# Start capture
 print("Starting capture...")
 cap = subprocess.Popen(
     [TSHARK, "-i", "5", "-f", "tcp port 53204", "-w", PCAP],
@@ -27,6 +29,7 @@ print(f"Capture PID: {cap.pid}")
 
 # 3. Open project (triggers fresh auth + Open)
 print("Opening project...")
+sdk = RealSdkInterop()
 try:
     info = sdk.open_project(PROJECT)
     print(f"Opened: {info.name}")
