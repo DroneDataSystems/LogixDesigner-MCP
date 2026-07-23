@@ -160,9 +160,9 @@ def _parse_tag_body(body: str, scope: str):
     
     if is_alias:
         # True alias: name OF SomeTag[0] (...)
-        alias_m = re.match(r'(\w+(?:\[[^\]]*\])?)', rest)
-        if alias_m:
-            alias_for = alias_m.group(1)
+        # The alias target is in the dtype field (e.g., "Pal2_N35[0]")
+        alias_for = dtype
+        dtype = "ALIAS"
         tag_type = "Alias"
     else:
         # Base tag with optional initial value: name : TYPE (attrs...) := value;
