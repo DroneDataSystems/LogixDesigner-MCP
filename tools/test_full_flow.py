@@ -1,5 +1,5 @@
 """Full gRPC flow: Open → GetAllExecutables → ExportToL5K."""
-import sys, grpc, subprocess, time, zlib
+import sys, grpc, subprocess, zlib
 
 sys.path.insert(0, 'C:/projects/LogixDesigner-MCP/proto')
 import logix_sdk_pb2 as pb
@@ -9,29 +9,10 @@ TSHARK = r"C:\Program Files\Wireshark\tshark.exe"
 ACD = r"C:\Users\MaB Technologies\Documents\PLC Projects\Mativ\Mativ_Sim.ACD"
 SERVICE = "LogixMCPServer"
 
-# ── Capture auth token ─────────────────────────────────────────────────
-print("Capturing auth token...")
-PCAP = r"C:\temp\grpc_flow.pcapng"
-cap = subprocess.Popen(
-    [TSHARK, "-i", "5", "-f", "tcp port 53204", "-w", PCAP],
-    stdout=subprocess.PIPE, stderr=subprocess.PIPE
-)
-time.sleep(1)
-subprocess.run(["sc", "stop", SERVICE], capture_output=True, timeout=30)
-time.sleep(5)
-subprocess.run(["sc", "start", SERVICE], capture_output=True, timeout=30)
-time.sleep(10)
+# ── Use existing capture with valid auth token ─────────────────────────
+print("Extracting auth token from existing capture...")
+PCAP = r"C:\temp\grpc_live_test.pcapng"
 
-sys.path.insert(0, r"C:\projects\LogixDesigner-MCP\src")
-from logix_mcp.sdk_interop_real import RealSdkInterop
-sdk = RealSdkInterop()
-sdk.open_project(ACD)
-time.sleep(2)
-sdk.close_project()
-cap.terminate()
-cap.wait(timeout=5)
-
-# Extract token
 r = subprocess.run(
     [TSHARK, "-r", PCAP, "-Y", "tcp.payload", "-T", "fields", "-e", "tcp.payload"],
     capture_output=True, text=True
