@@ -1,36 +1,61 @@
-// Fixed: Open uses separate message types per chunk, not a oneof
-
+// Logix Designer SDK gRPC — Verified from decompiled C# source
 syntax = "proto3";
 package lsdkmessages;
 
 service LogixSDK {
-    rpc Open(stream OpenChunk) returns (stream OperationResponse);
-    rpc GetAllExecutables(EmptyRequest) returns (stream OperationResponse);
-    rpc ExportToL5X(ExportRequest) returns (stream OperationResponse);
-    rpc PartialExportToXmlFile(PartialExportRequest) returns (stream OperationResponse);
+    rpc Open(stream ProjectOpenRequest) returns (stream OperationResponse);
+    rpc GetAllExecutables(ProjectRequest) returns (stream OperationResponse);
+    rpc ExportToL5X(ExportL5XRequest) returns (stream OperationResponse);
+    rpc ExportToL5K(ProjectRequest) returns (stream OperationResponse);
     rpc KeepAlive(EmptyRequest) returns (stream OperationResponse);
 }
 
-// Open is client-streaming. First message carries the auth token in field 1.
-// Subsequent messages carry file data in field 2.
-message OpenChunk {
-    bytes field_1 = 1;   // auth token in first message
-    bytes field_2 = 2;   // file data in subsequent messages
-}
-
-message EmptyRequest {}
-message ExportRequest { string output_path = 1; bool force = 2; }
-message PartialExportRequest { string xpath = 1; string output_file_path = 2; }
-
-message OperationResponse {
-    oneof result {
-        string string_result = 1;
-        uint32 uint_result = 2;
-        bytes bytes_result = 3;
-        bool bool_result = 4;
-        StringList executables_result = 5;
-        string error_message = 6;
+message ProjectOpenRequest {
+    oneof chunk {
+        string user_token = 1;
+        FileData file_data = 2;
     }
 }
 
-message StringList { repeated string items = 1; }
+message FileData {
+    oneof chunk {
+        bytes content = 1;
+        uint32 crc32 = 2;
+    }
+}
+
+message ProjectRequest {
+    string key = 1;
+}
+
+message ExportL5XRequest {
+    string key = 1;
+    bool detailed_l5x = 2;
+}
+
+message EmptyRequest {}
+
+message OperationResponse {
+    oneof result {
+        OperationResult operation_result = 1;
+        OperationData data = 2;
+    }
+}
+
+message OperationResult {
+    uint32 result_value = 1;
+    string result_message = 2;
+}
+
+message OperationData {
+    oneof value {
+        string string_value = 1;
+        uint32 uint32_value = 2;
+        bool bool_value = 3;
+        StringArray string_array_value = 4;
+    }
+}
+
+message StringArray {
+    repeated string values = 1;
+}
