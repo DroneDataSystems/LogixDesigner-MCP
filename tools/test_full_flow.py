@@ -10,7 +10,7 @@ ACD = r"C:\Users\MaB Technologies\Documents\PLC Projects\Mativ\Mativ_Sim.ACD"
 
 # ── Extract auth token from capture ────────────────────────────────────
 print("Extracting auth token...")
-PCAP = r"C:\temp\grpc_open_decode.pcapng"
+PCAP = r"C:\temp\grpc_live_test.pcapng"
 r = subprocess.run(
     [TSHARK, "-r", PCAP, "-Y", "tcp.payload", "-T", "fields", "-e", "tcp.payload"],
     capture_output=True, text=True
