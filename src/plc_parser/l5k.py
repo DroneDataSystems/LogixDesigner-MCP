@@ -156,21 +156,26 @@ def _parse_tag_body(body: str, scope: str):
     rest = m.group(4).strip()
 
     alias_for = None
+    tag_type = "Base"
+    
     if is_alias:
+        # True alias: name OF SomeTag[0] (...)
         alias_m = re.match(r'(\w+(?:\[[^\]]*\])?)', rest)
         if alias_m:
             alias_for = alias_m.group(1)
+        tag_type = "Alias"
     else:
-        # Match the LAST := value (before closing parens and semicolon)
-        # This avoids matching Description :=, Class :=, RADIX :=, etc.
-        m = re.search(r":=\s*(.+?)\s*;?\s*$", rest)
+        # Base tag with optional initial value: name : TYPE (attrs...) := value;
+        # Match the final := value (not Description :=, Class :=, etc.)
+        m = re.search(r":=\s*([^\"].+?)\s*;?\s*$", rest)
         if m:
             alias_for = m.group(1).strip().rstrip(";")
+        # Don't set tag_type = Alias for base tags with initial values
 
     return TagDef(
         name=name,
         data_type=dtype,
-        tag_type="Alias" if (is_alias or alias_for) else "Base",
+        tag_type=tag_type,
         alias_for=alias_for,
         scope=scope,
     )
