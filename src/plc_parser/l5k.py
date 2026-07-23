@@ -146,7 +146,7 @@ def _parse_tag_body(body: str, scope: str):
     """Parse tag body: NAME : TYPE[dim] (params...) := value;"""
     # Match: NAME : TYPE (params...) := value;
     # or:    NAME OF AliasTag (params...);
-    m = re.match(r'(\w+)\s+(OF|:)\s+(\w+)\s*(.*)', body)
+    m = re.match(r'(\w+)\s+(OF|:)\s+(\w+(?:\[[^\]]*\])?)\s*(.*)', body)
     if not m:
         return None
 
