@@ -11,7 +11,7 @@ SERVICE = "LogixMCPServer"
 
 # ── Use existing capture with valid auth token ─────────────────────────
 print("Extracting auth token from existing capture...")
-PCAP = r"C:\temp\grpc_live_test.pcapng"
+PCAP = r"C:\temp\grpc_open_decode.pcapng"
 
 r = subprocess.run(
     [TSHARK, "-r", PCAP, "-Y", "tcp.payload", "-T", "fields", "-e", "tcp.payload"],
