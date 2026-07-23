@@ -76,6 +76,9 @@ for line in lines[:200]:  # Only need first 200 frames
                     token = d[pos:pos+length]
                     if len(token) >= 1500:
                         auth_token = token
+                        # Save to disk for cron fetch
+                        with open(r"C:\temp\grpc_auth_token.bin", "wb") as tf:
+                            tf.write(token)
                         print(f"  Auth token: {len(auth_token)}B, start: {token[:20]}")
                         break
         except:
