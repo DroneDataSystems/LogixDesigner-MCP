@@ -1,39 +1,20 @@
-"""L5K Parser — Parse Rockwell RSLogix 5000 L5K export format.
-
-IE_VER 2.24 format. Parses:
-  - Controller metadata (name, processor type, revision)
-  - Controller-scope tags (aliases, base, UDT members)
-  - Programs with routines and program-scope tags
-  - Data types, modules, tasks
-
-Usage:
-    from plc_parser.l5k import parse_l5k
-    controller = parse_l5k("path/to/export.L5K")
-"""
-
+"""L5K Parser v4 — proper tag handling with multi-line attributes."""
 import re
 from dataclasses import dataclass, field
 from typing import Optional
 
-
-# ── Data model ────────────────────────────────────────────────────────
-
 @dataclass
 class TagDef:
     name: str
-    tag_type: str = "Base"  # Base, Alias, Produced, Consumed
+    tag_type: str = "Base"
     data_type: str = "DINT"
-    description: str = ""
-    dimensions: list[int] = field(default_factory=list)
-    value: Optional[str] = None
     alias_for: Optional[str] = None
     scope: str = "controller"
 
 @dataclass
 class RoutineDef:
     name: str
-    language: str = "Ladder"  # RLL, ST, FBD, SFC
-    rungs: int = 0
+    language: str = "Ladder"
 
 @dataclass
 class ProgramDef:
@@ -43,198 +24,197 @@ class ProgramDef:
     tags: list[TagDef] = field(default_factory=list)
 
 @dataclass
-class DataTypeDef:
-    name: str
-    members: list[TagDef] = field(default_factory=list)
-
-@dataclass
 class ControllerDef:
     name: str
     processor_type: str = ""
     major: int = 0
     minor: int = 0
     ie_ver: str = "2.24"
-    description: str = ""
     tags: list[TagDef] = field(default_factory=list)
     programs: list[ProgramDef] = field(default_factory=list)
-    data_types: list[DataTypeDef] = field(default_factory=list)
 
 
-# ── Parser ────────────────────────────────────────────────────────────
-
-class L5KParser:
-    """Recursive descent parser for L5K text format."""
-
-    def __init__(self, text: str):
-        self.lines = text.splitlines()
-        self.pos = 0
-        self.controller = ControllerDef(name="Unknown")
-
-    def parse(self) -> ControllerDef:
-        while self.pos < len(self.lines):
-            line = self.lines[self.pos].strip()
-            self.pos += 1
-
-            if line.startswith("IE_VER"):
-                self.controller.ie_ver = self._extract_value(line, "IE_VER")
-            elif line.startswith("CONTROLLER "):
-                self._parse_controller_header(line)
-                self._parse_controller_body()
-        return self.controller
-
-    def _parse_controller_header(self, line: str):
-        m = re.match(
-            r"CONTROLLER\s+(\S+)\s*\((.*)\)",
-            line, re.DOTALL
-        )
-        if m:
-            self.controller.name = m.group(1)
-            params = self._parse_params(m.group(2))
-            self.controller.processor_type = params.get("ProcessorType", "")
-            self.controller.major = int(params.get("Major", 0))
-            self.controller.minor = int(params.get("Minor", 0))
-
-    def _parse_controller_body(self):
-        while self.pos < len(self.lines):
-            line = self.lines[self.pos].strip()
-            self.pos += 1
-
-            if line.startswith("END_CONTROLLER"):
-                return
-            elif line == "TAG":
-                self.pos -= 1  # back up so _parse_tag_block sees the TAG line
-                self._parse_tag_block("controller")
-            elif line.startswith("PROGRAM "):
-                self.pos -= 1
-                self.controller.programs.append(self._parse_program(self.lines[self.pos].strip()))
-            elif line.startswith("DATATYPE "):
-                self.controller.data_types.append(self._parse_datatype(line))
-
-    def _parse_tag_block(self, scope: str):
-        """Parse TAG ... END_TAG block."""
-        self.pos += 1  # skip TAG line
-        while self.pos < len(self.lines):
-            line = self.lines[self.pos]
-            stripped = line.strip()
-
-            if stripped == "END_TAG":
-                self.pos += 1
-                return
-
-            if stripped and not stripped.startswith("//") and not stripped.startswith("(*"):
-                tag = self._parse_tag_line(line, scope)
-                if tag:
-                    if scope == "controller":
-                        self.controller.tags.append(tag)
-                    # Program tags handled by caller
-
-            self.pos += 1
-
-    def _parse_tag_line(self, line: str, scope: str) -> Optional[TagDef]:
-        """Parse a single tag definition line."""
-        stripped = line.strip()
-        # Skip description-only lines (indented)
-        if not stripped or stripped.startswith("//"):
-            return None
-
-        # Tag format: name TYPE dimensions? (description?) Attributes? := value?
-        m = re.match(
-            r'(\w+(?:\[\d+(?:\.\.\d+)?(?:,\d+(?:\.\.\d+)?)?\])?)\s+'  # name
-            r'(\w+(?:_\w+)*)\s*'  # type
-            r'(.*)',  # rest
-            stripped
-        )
-        if not m:
-            return None
-
-        name = m.group(1).strip("[]")
-        tag_type = m.group(2)
-        rest = m.group(3)
-
-        # Check if it's an alias
-        alias_match = re.search(r':=\s*(\S+)', rest)
-        alias_for = alias_match.group(1) if alias_match else None
-
-        tag = TagDef(
-            name=name,
-            tag_type="Alias" if alias_for else "Base",
-            data_type=tag_type,
-            alias_for=alias_for,
-            scope=scope,
-        )
-        return tag
-
-    def _parse_program(self, header_line: str) -> ProgramDef:
-        m = re.match(r"PROGRAM\s+(\S+)\s*\(.*Class\s*:=\s*(\w+)", header_line)
-        if not m:
-            return ProgramDef(name="Unknown")
-
-        prog = ProgramDef(name=m.group(1), program_class=m.group(2))
-
-        self.pos += 1  # skip PROGRAM header
-        while self.pos < len(self.lines):
-            line = self.lines[self.pos].strip()
-
-            if line == "END_PROGRAM":
-                self.pos += 1
-                return prog
-            elif line == "TAG":
-                self._parse_tag_block_in_program(prog)
-            elif line.startswith("ROUTINE "):
-                prog.routines.append(self._parse_routine(line))
-            else:
-                self.pos += 1
-
-        return prog
-
-    def _parse_tag_block_in_program(self, prog: ProgramDef):
-        """Parse program-scope tags."""
-        self.pos += 1  # skip TAG
-        while self.pos < len(self.lines):
-            line = self.lines[self.pos].strip()
-            if line == "END_TAG":
-                self.pos += 1
-                return
-            if line and not line.startswith("//"):
-                tag = self._parse_tag_line(self.lines[self.pos], prog.name)
-                if tag:
-                    prog.tags.append(tag)
-            self.pos += 1
-
-    def _parse_routine(self, header_line: str) -> RoutineDef:
-        m = re.match(r"ROUTINE\s+(\S+)\s*(?:\(.*Type\s*:=\s*(\w+))?", header_line)
-        if m:
-            return RoutineDef(name=m.group(1), language=m.group(2) or "Ladder")
-        return RoutineDef(name=header_line.replace("ROUTINE ", "").strip())
-
-    def _parse_datatype(self, header_line: str) -> DataTypeDef:
-        return DataTypeDef(name=header_line.replace("DATATYPE ", "").strip(" ():"))
-
-    # ── Helpers ──────────────────────────────────────────────────────
-
-    @staticmethod
-    def _extract_value(line: str, key: str) -> str:
-        m = re.search(rf'{key}\s*:=\s*(\S+)', line)
-        return m.group(1).strip(";\"") if m else ""
-
-    @staticmethod
-    def _parse_params(params_str: str) -> dict:
-        """Parse key := value pairs."""
-        result = {}
-        for m in re.finditer(r'(\w+)\s*:=\s*("(?:[^"]*)"|\S+)', params_str):
-            val = m.group(2).strip('"')
-            result[m.group(1)] = val
-        return result
-
-
-def parse_l5k(path_or_text: str) -> ControllerDef:
-    """Parse an L5K file path or text string into a ControllerDef."""
-    if "\n" in path_or_text:
-        text = path_or_text
+def parse_l5k(text_or_path: str) -> ControllerDef:
+    if "\n" in text_or_path:
+        text = text_or_path
     else:
-        # Remove UTF-8 BOM if present
-        with open(path_or_text, "r", encoding="utf-8-sig") as f:
+        with open(text_or_path, "r", encoding="utf-8-sig") as f:
             text = f.read()
 
-    parser = L5KParser(text)
-    return parser.parse()
+    lines = text.splitlines()
+    i = 0
+    controller = ControllerDef(name="Unknown")
+
+    while i < len(lines):
+        line = lines[i].strip()
+        i += 1
+
+        if line.startswith("IE_VER"):
+            m = re.search(r"IE_VER\s*:=\s*([\d.]+)", line)
+            if m:
+                controller.ie_ver = m.group(1).strip(";")
+
+        elif line.startswith("CONTROLLER "):
+            header = _accumulate_header(lines, i - 1)
+            i = header[1]
+            m = re.match(r"CONTROLLER\s+(\S+)\s*\((.*)\)", header[0], re.DOTALL)
+            if m:
+                controller.name = m.group(1)
+                for pm in re.finditer(r'(\w+)\s*:=\s*"([^"]*)"', m.group(2)):
+                    if pm.group(1) == "ProcessorType":
+                        controller.processor_type = pm.group(2)
+                for pm in re.finditer(r"(\w+)\s*:=\s*(\d+)", m.group(2)):
+                    if pm.group(1) == "Major":
+                        controller.major = int(pm.group(2))
+                    elif pm.group(1) == "Minor":
+                        controller.minor = int(pm.group(2))
+
+        elif line == "TAG":
+            tags, i = _parse_tag_block(lines, i, "controller")
+            controller.tags.extend(tags)
+
+        elif line.startswith("PROGRAM "):
+            prog, i = _parse_program(lines, i - 1)
+            controller.programs.append(prog)
+
+        elif line.startswith("END_CONTROLLER"):
+            break
+
+    return controller
+
+
+def _accumulate_header(lines, start):
+    """Accumulate multi-line header until parens match."""
+    header = lines[start].strip()
+    i = start + 1
+    depth = header.count("(") - header.count(")")
+    while depth > 0 and i < len(lines):
+        header += " " + lines[i].strip()
+        depth = header.count("(") - header.count(")")
+        i += 1
+    return header, i
+
+
+def _parse_tag_block(lines, i, scope):
+    """Parse TAG ... END_TAG. Tags start with \\t\\t (two tabs)."""
+    tags = []
+    while i < len(lines):
+        raw = lines[i]
+        stripped = raw.strip()
+        i += 1
+
+        if stripped == "END_TAG":
+            return tags, i
+        if not stripped or stripped.startswith("//"):
+            continue
+
+        # A tag starts with \\t\\t (indent level 2) and a word
+        if raw.startswith("\t\t") and not raw.startswith("\t\t\t"):
+            tag, i = _parse_one_tag(lines, i - 1, scope)
+            if tag:
+                tags.append(tag)
+
+    return tags, i
+
+
+def _parse_one_tag(lines, start, scope):
+    """Parse a single tag that may span multiple lines."""
+    raw = lines[start]
+    stripped = raw.strip()
+    i = start + 1
+
+    # Accumulate multi-line tag body until next tag or END_TAG
+    body = stripped
+    while i < len(lines):
+        next_raw = lines[i]
+        next_stripped = next_raw.strip()
+        # Stop at next tag, END_TAG, PROGRAM, or END_CONTROLLER
+        if (next_raw.startswith("\t\t") and not next_raw.startswith("\t\t\t")) or \
+           next_stripped in ("END_TAG", "END_CONTROLLER") or \
+           next_stripped.startswith("PROGRAM "):
+            break
+        # Accumulate attribute lines (indented with 3+ tabs)
+        if next_raw.startswith("\t\t\t") or next_raw.startswith("\t\t  "):
+            body += " " + next_stripped
+        i += 1
+
+    # Parse the accumulated body
+    return _parse_tag_body(body, scope), i
+
+
+def _parse_tag_body(body: str, scope: str):
+    """Parse tag body: NAME : TYPE[dim] (params...) := value;"""
+    # Match: NAME : TYPE (params...) := value;
+    # or:    NAME OF AliasTag (params...);
+    m = re.match(r'(\w+)\s+(OF|:)\s+(\w+)\s*(.*)', body)
+    if not m:
+        return None
+
+    name = m.group(1)
+    is_alias = (m.group(2) == "OF")
+    dtype = m.group(3) if not is_alias else "ALIAS"
+    rest = m.group(4).strip()
+
+    alias_for = None
+    if is_alias:
+        alias_m = re.match(r'(\w+(?:\[[^\]]*\])?)', rest)
+        if alias_m:
+            alias_for = alias_m.group(1)
+    else:
+        # Check for := value at the end
+        alias_m = re.search(r":=\s*(.+?)(?:;|$)", rest)
+        if alias_m:
+            alias_for = alias_m.group(1).strip().rstrip(";")
+
+    return TagDef(
+        name=name,
+        data_type=dtype,
+        tag_type="Alias" if (is_alias or alias_for) else "Base",
+        alias_for=alias_for,
+        scope=scope,
+    )
+
+
+def _parse_program(lines, i):
+    """Parse PROGRAM ... END_PROGRAM."""
+    header, i = _accumulate_header(lines, i)
+    m = re.match(r"PROGRAM\s+(\S+)\s*\(.*Class\s*:=\s*(\w+)", header)
+    name = m.group(1) if m else header.split()[1] if len(header.split()) > 1 else "Unknown"
+    pclass = m.group(2) if m else "Standard"
+    prog = ProgramDef(name=name, program_class=pclass)
+
+    while i < len(lines):
+        raw = lines[i]
+        stripped = raw.strip()
+        i += 1
+
+        if stripped == "END_PROGRAM":
+            return prog, i
+        elif stripped == "TAG":
+            tags, i = _parse_tag_block(lines, i, name)
+            prog.tags.extend(tags)
+        elif stripped.startswith("ROUTINE "):
+            rm = re.match(r"ROUTINE\s+(\S+)", stripped)
+            if rm:
+                prog.routines.append(RoutineDef(name=rm.group(1)))
+
+    return prog, i
+
+
+if __name__ == "__main__":
+    import sys, time
+    path = sys.argv[1] if len(sys.argv) > 1 else r"C:\temp\Palletizer.L5K"
+    start = time.time()
+    c = parse_l5k(path)
+    elapsed = time.time() - start
+    print(f"Parsed in {elapsed:.2f}s")
+    print(f"Controller: {c.name} v{c.major}.{c.minor} ({c.processor_type})")
+    print(f"Tags: {len(c.tags)}")
+    print(f"Programs: {len(c.programs)}")
+    for p in c.programs:
+        print(f"  {p.name}: {len(p.routines)} routines, {len(p.tags)} tags")
+    if c.tags:
+        print(f"First 10 tags:")
+        for t in c.tags[:10]:
+            a = f" -> {t.alias_for[:50]}" if t.alias_for else ""
+            print(f"  {t.name}: {t.data_type}{a}")
