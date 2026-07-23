@@ -45,13 +45,15 @@ print("Capture stopped")
 
 # ── Step 2: Extract auth token ─────────────────────────────────────────
 r = subprocess.run(
-    [TSHARK, "-r", PCAP, "-Y", "tcp.payload and frame.number < 20", "-T", "fields",
+    [TSHARK, "-r", PCAP, "-Y", "tcp.payload", "-T", "fields",
      "-e", "frame.number", "-e", "tcp.payload"],
     capture_output=True, text=True
 )
 
 auth_token = None
-for line in r.stdout.splitlines():
+lines = r.stdout.splitlines()
+print(f"  Scanning {len(lines)} payload frames...")
+for line in lines[:200]:  # Only need first 200 frames
     parts = line.split("\t")
     if len(parts) >= 2:
         try:
