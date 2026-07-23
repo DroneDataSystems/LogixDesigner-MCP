@@ -161,10 +161,11 @@ def _parse_tag_body(body: str, scope: str):
         if alias_m:
             alias_for = alias_m.group(1)
     else:
-        # Check for := value at the end
-        alias_m = re.search(r":=\s*(.+?)(?:;|$)", rest)
-        if alias_m:
-            alias_for = alias_m.group(1).strip().rstrip(";")
+        # Match the LAST := value (before closing parens and semicolon)
+        # This avoids matching Description :=, Class :=, RADIX :=, etc.
+        m = re.search(r":=\s*(.+?)\s*;?\s*$", rest)
+        if m:
+            alias_for = m.group(1).strip().rstrip(";")
 
     return TagDef(
         name=name,
