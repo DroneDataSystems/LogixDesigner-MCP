@@ -59,23 +59,24 @@ for line in lines[:200]:  # Only need first 200 frames
             d = bytes.fromhex(parts[1])
             # Look for the auth token: starts with "c0sh" after HTTP/2+gRPC headers
             idx = d.find(b'c0sh')
-            if idx > 20:  # After headers
-                # Extract the full base64 token (1656 bytes)
-                proto_data = d[idx-2:]  # -2 for the field tag + length varint
-                # The auth message: field 1 tag (0x0a) + varint length (2 bytes) + token (1656 bytes)
-                # Extract just the token string
-                if proto_data[0] == 0x0a:  # field 1 tag
-                    # Read varint length
-                    length = 0; shift = 0; pos = 1
-                    while pos < len(proto_data):
-                        b = proto_data[pos]; pos += 1
+            if idx >= 14:  # After headers (min 14 bytes: HTTP/2 9 + gRPC 5)
+                # The auth proto: field 1 tag (0x0a) + varint length + token
+                # Back up to find the field tag
+                tag_pos = idx
+                while tag_pos > 0 and d[tag_pos] != 0x0a:
+                    tag_pos -= 1
+                if tag_pos > 0 and d[tag_pos] == 0x0a:
+                    # Parse varint length
+                    length = 0; shift = 0; pos = tag_pos + 1
+                    while pos < len(d):
+                        b = d[pos]; pos += 1
                         length |= (b & 0x7f) << shift
                         if not (b & 0x80): break
                         shift += 7
-                    token = proto_data[pos:pos+length]
-                    if len(token) >= 1500 and b'c0sh' in token[:10]:
+                    token = d[pos:pos+length]
+                    if len(token) >= 1500:
                         auth_token = token
-                        print(f"  Auth token: {len(auth_token)}B")
+                        print(f"  Auth token: {len(auth_token)}B, start: {token[:20]}")
                         break
         except:
             pass
