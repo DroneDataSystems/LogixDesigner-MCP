@@ -9,14 +9,7 @@ TSHARK = r"C:\Program Files\Wireshark\tshark.exe"
 ACD = r"C:\Users\MaB Technologies\Documents\PLC Projects\Mativ\Mativ_Sim.ACD"
 SERVICE = "LogixMCPServer"
 
-# ── Step 1: Restart service + capture fresh auth token ─────────────────
-print("Restarting service...")
-subprocess.run(["sc", "stop", SERVICE], capture_output=True, timeout=30)
-time.sleep(5)
-subprocess.run(["sc", "start", SERVICE], capture_output=True, timeout=30)
-time.sleep(8)  # Wait for SDK init
-
-# Start capture
+# ── Step 1: Start capture FIRST, then restart service ──────────────────
 print("Starting capture...")
 PCAP = r"C:\temp\grpc_live_test.pcapng"
 cap = subprocess.Popen(
@@ -24,6 +17,12 @@ cap = subprocess.Popen(
     stdout=subprocess.PIPE, stderr=subprocess.PIPE
 )
 time.sleep(1)
+
+print("Restarting service...")
+subprocess.run(["sc", "stop", SERVICE], capture_output=True, timeout=30)
+time.sleep(5)
+subprocess.run(["sc", "start", SERVICE], capture_output=True, timeout=30)
+time.sleep(10)  # Wait for SDK init + auth handshake
 
 # Open project via SDK to generate fresh auth
 print("Opening project via SDK...")
