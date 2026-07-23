@@ -150,19 +150,17 @@ def _parse_tag_body(body: str, scope: str):
     if not m:
         return None
 
-    name = m.group(1)
+    name = m.group(1).strip()
     is_alias = (m.group(2) == "OF")
-    dtype = m.group(3) if not is_alias else "ALIAS"
+    raw_dtype = m.group(3)  # Save original for alias targets
+    dtype = raw_dtype if not is_alias else "ALIAS"
     rest = m.group(4).strip()
 
     alias_for = None
     tag_type = "Base"
     
     if is_alias:
-        # True alias: name OF SomeTag[0] (...)
-        # The alias target is in the dtype field (e.g., "Pal2_N35[0]")
-        alias_for = dtype
-        dtype = "ALIAS"
+        alias_for = raw_dtype  # The original dtype IS the alias target
         tag_type = "Alias"
     else:
         # Base tag with optional initial value: name : TYPE (attrs...) := value;
